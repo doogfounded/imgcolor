@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Color Breakdown</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 820px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--panel);
+      padding: 0.5rem 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .controls label { font-size: 0.9rem; color: var(--muted); }
+    .controls span { font-weight: 700; min-width: 1.5ch; text-align: right; color: var(--accent); }
+    input[type="range"] { accent-color: var(--accent); cursor: pointer; }
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 0.75rem;
+      background: var(--panel);
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .dropzone.dragover, .dropzone:hover {
+      border-color: var(--accent);
+      background: #1e293b99;
+    }
+    .dropzone p { color: var(--muted); font-size: 0.95rem; }
+    .dropzone strong { color: var(--accent); }
+    #preview {
+      max-height: 260px;
+      max-width: 100%;
+      border-radius: 0.5rem;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .results { display: none; flex-direction: column; gap: 1.25rem; }
+    .bar {
+      height: 36px;
+      width: 100%;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      display: flex;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    }
+    .bar-slice {
+      height: 100%;
+      transition: width 0.2s ease;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 0.75rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .swatch {
+      width: 44px;
+      height: 44px;
+      border-radius: 0.375rem;
+      border: 1px solid rgba(255,255,255,0.15);
+      flex-shrink: 0;
+    }
+    .info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .pct { font-size: 1.1rem; font-weight: 700; }
+    .codes { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .code-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .code-btn:hover { color: var(--text); border-color: var(--accent); }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      background: var(--accent);
+      color: #0f172a;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 2rem;
+      font-size: 0.85rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Image Color Breakdown</h1>
+      <div class="controls">
+        <label for="kSlider">Colors (K):</label>
+        <input type="range" id="kSlider" min="2" max="20" value="8">
+        <span id="kVal">8</span>
+      </div>
+    </header>
+
+    <div class="dropzone" id="dropzone">
+      <img id="preview" alt="Preview">
+      <p><strong>Click to choose</strong>, drag &amp; drop an image, or press <strong>Ctrl+V</strong> to paste</p>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div class="results" id="results">
+      <div class="bar" id="bar"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied!</div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const kSlider = document.getElementById('kSlider');
+    const kVal = document.getElementById('kVal');
+    const results = document.getElementById('results');
+    const bar = document.getElementById('bar');
+    const grid = document.getElementById('grid');
+    const toast = document.getElementById('toast');
+
+    let pixels = []; // Array of [r, g, b]
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) loadFile(e.target.files[0]);
+    });
+    window.addEventListener('paste', e => {
+      const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+      if (item) loadFile(item.getAsFile());
+    });
+
+    kSlider.addEventListener('input', () => {
+      kVal.textContent = kSlider.value;
+      if (pixels.length) analyze();
+    });
+
+    function loadFile(file) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        preview.src = url;
+        preview.style.display = 'block';
+        extractPixels(img);
+        analyze();
+      };
+      img.src = url;
+    }
+
+    function extractPixels(img) {
+      const MAX = 150;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      pixels = [];
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] >= 128) { // Ignore transparent pixels
+          pixels.push([data[i], data[i + 1], data[i + 2]]);
+        }
+      }
+    }
+
+    function distSq(a, b) {
+      const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2];
+      return dr * dr + dg * dg + db * db;
+    }
+
+    function analyze() {
+      if (!pixels.length) return;
+      const k = Math.min(parseInt(kSlider.value, 10), pixels.length);
+
+      // Deterministic K-Means++ initialization
+      const centroids = [pixels[0].slice()];
+      const dists = new Float64Array(pixels.length);
+
+      for (let c = 1; c < k; c++) {
+        let maxD = -1, bestIdx = 0;
+        for (let i = 0; i < pixels.length; i++) {
+          let minD = Infinity;
+          for (let j = 0; j < centroids.length; j++) {
+            const d = distSq(pixels[i], centroids[j]);
+            if (d < minD) minD = d;
+          }
+          dists[i] = minD;
+          if (minD > maxD) { maxD = minD; bestIdx = i; }
+        }
+        centroids.push(pixels[bestIdx].slice());
+      }
+
+      const assignments = new Int32Array(pixels.length);
+      for (let iter = 0; iter < 12; iter++) {
+        const sums = Array.from({ length: k }, () => [0, 0, 0, 0]);
+        let changed = false;
+
+        for (let i = 0; i < pixels.length; i++) {
+          const p = pixels[i];
+          let bestC = 0, bestD = Infinity;
+          for (let c = 0; c < k; c++) {
+            const d = distSq(p, centroids[c]);
+            if (d < bestD) { bestD = d; bestC = c; }
+          }
+          if (assignments[i] !== bestC) { assignments[i] = bestC; changed = true; }
+          sums[bestC][0] += p[0];
+          sums[bestC][1] += p[1];
+          sums[bestC][2] += p[2];
+          sums[bestC][3] += 1;
+        }
+
+        if (!changed && iter > 0) break;
+        for (let c = 0; c < k; c++) {
+          if (sums[c][3] > 0) {
+            centroids[c][0] = sums[c][0] / sums[c][3];
+            centroids[c][1] = sums[c][1] / sums[c][3];
+            centroids[c][2] = sums[c][2] / sums[c][3];
+          }
+        }
+      }
+
+      const counts = new Int32Array(k);
+      for (let i = 0; i < pixels.length; i++) counts[assignments[i]]++;
+
+      const clusters = centroids
+        .map((c, idx) => {
+          const r = Math.round(c[0]), g = Math.round(c[1]), b = Math.round(c[2]);
+          const hex = '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+          const pct = (counts[idx] / pixels.length) * 100;
+          return { r, g, b, hex, pct, count: counts[idx] };
+        })
+        .filter(c => c.count > 0)
+        .sort((a, b) => b.pct - a.pct);
+
+      render(clusters);
+    }
+
+    function render(clusters) {
+      results.style.display = 'flex';
+      bar.innerHTML = clusters.map(c =>
+        `<div class="bar-slice" style="width:${c.pct}%;background:${c.hex}" title="${c.hex} (${c.pct.toFixed(1)}%)"></div>`
+      ).join('');
+
+      grid.innerHTML = clusters.map(c => {
+        const rgb = `rgb(${c.r}, ${c.g}, ${c.b})`;
+        return `
+          <div class="card">
+            <div class="swatch" style="background:${c.hex}"></div>
+            <div class="info">
+              <div class="pct">${c.pct.toFixed(1)}%</div>
+              <div class="codes">
+                <button class="code-btn" onclick="copyText('${c.hex}')">${c.hex}</button>
+                <button class="code-btn" onclick="copyText('${rgb}')">${rgb}</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    let toastTimer;
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      toast.textContent = `Copied ${text}`;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
+    }
+  </script>
+</body>
+</html>
+
